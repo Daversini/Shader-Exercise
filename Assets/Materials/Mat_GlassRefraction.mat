@@ -25,10 +25,9 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _RefractionIndex: 0.38
+    - _RefractionIndex: 0.1
     - _RimIntensity: 1
-    - _Transparency: 0.653
     m_Colors:
-    - _GlassColor: {r: 0, g: 1, b: 0, a: 0.5}
-    - _RimColor: {r: 1, g: 0, b: 0, a: 1}
+    - _InnerColor: {r: 0.6, g: 0, b: 1, a: 0.5}
+    - _RimColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []

@@ -1,10 +1,9 @@
-Shader "Custom/Surface_GlassRefraction"
+Shader "Custom/Crystal"
 {
     Properties
     {
-        _RefractionIndex ("Refraction Index", Range(0.0, 1.0)) = 0.5 // Indice di rifrazione controllabile
-        _Transparency ("Transparency", Range(0, 1)) = 0.8 // Trasparenza del materiale
-        _GlassColor ("Glass Color", Color) = (0,1,0,0.5) // Colore del vetro
+        _RefractionIndex ("Refraction Index", Range(0.0, 0.2)) = 0.1 // Indice di rifrazione
+        _InnerColor ("Inner Color", Color) = (0.6,0,1,0.5) // Colore interno
         _RimColor ("Rim Light Color", Color) = (1,1,1,1) // Colore della rim light
         _RimIntensity ("Rim Light Intensity", Range(0, 1)) = 1.0 // Intensità della rim light
     }
@@ -20,8 +19,7 @@ Shader "Custom/Surface_GlassRefraction"
 
         sampler2D _GrabTexture;
         float _RefractionIndex;
-        float _Transparency;
-        fixed4 _GlassColor;
+        fixed4 _InnerColor;
         fixed4 _RimColor;
         float _RimIntensity;
 
@@ -34,32 +32,33 @@ Shader "Custom/Surface_GlassRefraction"
 
         void surf (Input IN, inout SurfaceOutputStandard o)
         {
+            // Calcola la rim light invertita
+            float rim = saturate(1.0 - dot(normalize(IN.viewDir), normalize(o.Normal)));
+            fixed4 rimLight = _RimColor * rim * _RimIntensity;
+
             // Calcola le coordinate UV della texture catturata
             float2 grabUV = IN.screenPos.xy / IN.screenPos.w;
 
             // Calcola il vettore di rifrazione
             float3 viewDir = normalize(IN.viewDir);
             float3 normal = normalize(o.Normal);
-            float3 refracted = refract(viewDir, normal, 1.0); // Mantieni l'indice di rifrazione fisso a 1.0 per ottenere il vettore di rifrazione
+            float3 refracted = refract(viewDir, normal, 1.0);
 
             // Applica la distorsione basata sull'indice di rifrazione alle UV sia orizzontali che verticali
-            float2 distUV = grabUV + refracted.xy * _RefractionIndex; // L'indice di rifrazione controlla di quanto spostare le UV
+            grabUV += refracted.xy * _RefractionIndex; // L'indice di rifrazione controlla di quanto spostare le UV
 
             // Campiona la texture catturata con le coordinate distorte
-            fixed4 grabbedColor = tex2D(_GrabTexture, distUV);
+            fixed4 grabbedColor = tex2D(_GrabTexture, grabUV);
 
             // Applica il colore del vetro
-            grabbedColor.rgb = lerp(grabbedColor.rgb, _GlassColor.rgb, _GlassColor.a);
+            grabbedColor.rgb = lerp(grabbedColor.rgb, _InnerColor.rgb, _InnerColor.a);
 
-            // Calcola l'effetto di rim light
-            float rim = 1.0 - saturate(dot(viewDir, normal));
-            fixed4 rimLight = _RimColor * pow(rim, _RimIntensity);
+            // Combina la rim light distorta con il colore distorto
+            fixed4 finalColor = grabbedColor + rimLight;
 
             // Assegna i valori di output
-            o.Albedo = grabbedColor.rgb + rimLight.rgb;  // Usa il colore rifratto e colorato, con l'effetto di rim light
-
-            // Calcola la trasparenza distorta
-            o.Alpha = _Transparency; // Mantieni la trasparenza costante
+            o.Albedo = finalColor.rgb;  // Usa il colore rifratto e colorato, con l'effetto di rim light
+            o.Alpha = grabbedColor.a;  // Usa l'alpha dalla texture catturata per la trasparenza
         }
         ENDCG
     }
