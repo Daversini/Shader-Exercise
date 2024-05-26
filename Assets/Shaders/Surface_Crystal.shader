@@ -2,84 +2,74 @@ Shader "Custom/Surface_Crystal"
 {
     Properties
     {
-        _MainTex ("Color Texture", 2D) = "white" {}
-        _NormalMap ("Normal Map", 2D) = "bump" {}
-        _AOMap ("Ambient Occlusion Map", 2D) = "white" {}
-        _RoughnessMap ("Roughness Map", 2D) = "white" {}
-        _DistortionIntensity ("Distortion Intensity", Range(0, 1)) = 0.5
-        _RimLightColor ("Rim Light Color", Color) = (1,0,0,1)
-        _RimLightIntensity ("Rim Light Intensity", Range(0, 1)) = 1.0
-        _Smoothness ("Smoothness", Range(0, 1)) = 0.8
-        _Transparency ("Transparency", Range(0, 1)) = 0.8
+        // Refraction Properties
+        [Header(Refraction)]
+        _RefractionIndex ("Refraction Index", Range(0.0, 0.5)) = 0.1 // Indice di rifrazione
+        _InnerColor ("Inner Color", Color) = (0.6,0,1,0.5) // Colore interno
+
+        // Rim Light Properties
+        [Header(Rim Light)]
+        _RimColor ("Rim Light Color", Color) = (1,0,0,1) // Colore della rim light
+        _RimPower ("Rim Light Power", Range(0.0, 10.0)) = 0.2 // Potenza della rim light
+        _RimIntensity ("Rim Light Intensity", Range(0.0, 10.0)) = 10.0 // Intensità della rim light
     }
+
     SubShader
     {
-        Tags { "Queue"="Transparent" "RenderType"="Transparent" } // Set render type to transparent
+        Tags { "Queue"="Transparent" "RenderType"="Transparent" } // Imposta il render type come trasparente
         LOD 200
 
-        GrabPass { "_GrabTexture" } // Capture the screen for distortion
+        GrabPass { "_GrabTexture" } // Cattura la scena dietro l'oggetto per l'effetto di rifrazione
 
         CGPROGRAM
-        #pragma surface surf Standard alpha:fade // Use Standard surface with fade transparency
+        #pragma surface surf Standard alpha:fade // Usa il surface shader standard con trasparenza fade
 
-        // Texture and variable declarations
-        sampler2D _MainTex;
-        sampler2D _NormalMap;
-        sampler2D _AOMap;
-        sampler2D _RoughnessMap;
         sampler2D _GrabTexture;
-        float _DistortionIntensity;
-        fixed4 _RimLightColor;
-        float _RimLightIntensity;
-        float _Smoothness;
-        float _Transparency;
+        float _RefractionIndex;
+        fixed4 _InnerColor;
+        fixed4 _RimColor;
+        float _RimPower;
+        float _RimIntensity;
 
         struct Input
         {
-            float2 uv_MainTex; // UV coordinates for the main texture
-            float3 worldPos; // World position
-            float3 viewDir; // View direction
-            float4 screenPos; // Screen position for grab pass
+            float3 worldPos; // Posizione nel mondo
+            float3 viewDir; // Direzione della vista
+            float4 screenPos; // Posizione sullo schermo per il GrabPass
+            float3 worldNormal; // Normale del mondo
         };
 
         void surf (Input IN, inout SurfaceOutputStandard o)
         {
-            float2 tiledUV = IN.uv_MainTex; // Adjust UVs for tiling and offset
-
-            fixed4 c = tex2D(_MainTex, tiledUV); // Sample the main texture
-
-            // Apply distortion based on world position
-            float3 distOffset = normalize(IN.worldPos) * _DistortionIntensity;
-            float2 distUV = IN.uv_MainTex + distOffset.xy;
-            c = tex2D(_MainTex, distUV); // Sample the main texture with distortion
-
-            // Sample the grabbed texture for refraction effect
+            // Calcola le coordinate UV della texture catturata
             float2 grabUV = IN.screenPos.xy / IN.screenPos.w;
-            grabUV += distOffset.xy * _DistortionIntensity;
+
+            // Calcola il vettore di rifrazione
+            float3 viewDir = normalize(IN.viewDir);
+            float3 normal = normalize(IN.worldNormal);
+            float3 refracted = refract(viewDir, normal, 1.0);
+
+            // Applica la distorsione basata sull'indice di rifrazione alle UV sia orizzontali che verticali
+            grabUV += refracted.xy * _RefractionIndex;
+
+            // Campiona la texture catturata con le coordinate distorte
             fixed4 grabbedColor = tex2D(_GrabTexture, grabUV);
 
-            // Calculate rim light effect
-            float rim = saturate(dot(normalize(IN.viewDir), o.Normal));
-            rim = 1.0 - rim;
-            fixed4 rimLight = _RimLightColor * rim * _RimLightIntensity;
+            // Applica il colore del vetro
+            grabbedColor.rgb = lerp(grabbedColor.rgb, _InnerColor.rgb, _InnerColor.a);
 
-            // Output assignments
-            o.Albedo = c.rgb;
-            o.Alpha = c.a * _Transparency;  // Apply transparency
-            o.Emission = rimLight.rgb + grabbedColor.rgb * _DistortionIntensity;
+            // Calcola il fattore di rim light usando il termine di Fresnel
+            float rimFactor = pow(1.0 - saturate(dot(viewDir, normal)), 1.0 / _RimPower);
+            fixed4 rimColor = _RimColor * _RimIntensity * rimFactor;
 
-            // Sample normal map and calculate normal
-            fixed3 normalTex = UnpackNormal(tex2D(_NormalMap, tiledUV));
-            o.Normal = normalize(normalTex);
+            // Combina il colore della rim light con il colore rifratto
+            grabbedColor.rgb += rimColor.rgb;
 
-            // Sample roughness map and assign values
-            o.Metallic = tex2D(_RoughnessMap, tiledUV).r;
-            o.Smoothness = _Smoothness;
-
-            // Sample ambient occlusion map
-            o.Occlusion = tex2D(_AOMap, tiledUV).r;
+            // Assegna i valori di output
+            o.Albedo = grabbedColor.rgb;  // Usa il colore finale con la rim light
+            o.Alpha = grabbedColor.a;  // Usa l'alpha dalla texture catturata per la trasparenza
         }
         ENDCG
     }
-    FallBack "Diffuse"
+    FallBack "Transparent/Diffuse"
 }

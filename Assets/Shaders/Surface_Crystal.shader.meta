@@ -1,13 +1,8 @@
 fileFormatVersion: 2
-guid: dd84de3c22236534aa0f6a272765c5c4
+guid: 64d4127c98581614fa74c097cf412aa1
 ShaderImporter:
   externalObjects: {}
-  defaultTextures:
-  - _MainTex: {fileID: 2800000, guid: 2de16eef0f093524382a54cfe9028606, type: 3}
-  - _NormalMap: {fileID: 2800000, guid: 39a60385f947ce0408a4de77c0d556bc, type: 3}
-  - _AOMap: {fileID: 2800000, guid: 29c441e44659c664c96619b66e75a17e, type: 3}
-  - _HeightMap: {fileID: 2800000, guid: 102c8d2b6509d4441a18d452decc4f78, type: 3}
-  - _RoughnessMap: {fileID: 2800000, guid: 6f29d62e848dfb44e9baada83ab65c30, type: 3}
+  defaultTextures: []
   nonModifiableTextures: []
   userData: 
   assetBundleName: 
