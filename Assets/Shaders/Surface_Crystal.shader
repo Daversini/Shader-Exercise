@@ -4,72 +4,97 @@ Shader "Custom/Surface_Crystal"
     {
         // Refraction Properties
         [Header(Refraction)]
-        _RefractionIndex ("Refraction Index", Range(0.0, 0.5)) = 0.1 // Indice di rifrazione
-        _InnerColor ("Inner Color", Color) = (0.6,0,1,0.5) // Colore interno
+        _RefractionColor ("Refraction Color", Color) = (0.6,0,1,0.5)
+        _RefractionIndex ("Refraction Index", Range(0.0, 0.5)) = 0.1
 
-        // Rim Light Properties
-        [Header(Rim Light)]
-        _RimColor ("Rim Light Color", Color) = (1,0,0,1) // Colore della rim light
-        _RimPower ("Rim Light Power", Range(0.0, 10.0)) = 0.2 // Potenza della rim light
-        _RimIntensity ("Rim Light Intensity", Range(0.0, 10.0)) = 10.0 // Intensità della rim light
+        // Fresnel Properties
+        [Header(Fresnel)]
+        _FresnelColor ("Fresnel Color", Color) = (1,0,0,1)
+        _FresnelPower ("Fresnel Power", Range(0.0, 10.0)) = 0.2
+        _FresnelIntensity ("Fresnel Intensity", Range(0.0, 10.0)) = 10.0
     }
 
     SubShader
     {
-        Tags { "Queue"="Transparent" "RenderType"="Transparent" } // Imposta il render type come trasparente
+        // Setting render type to transparent
+        Tags { "Queue"="Transparent" "RenderType"="Transparent" }
         LOD 200
 
-        GrabPass { "_GrabTexture" } // Cattura la scena dietro l'oggetto per l'effetto di rifrazione
+        // Capturing the scene behind the object for refraction effect
+        GrabPass { "_GrabTexture" }
 
-        CGPROGRAM
-        #pragma surface surf Standard alpha:fade // Usa il surface shader standard con trasparenza fade
-
-        sampler2D _GrabTexture;
-        float _RefractionIndex;
-        fixed4 _InnerColor;
-        fixed4 _RimColor;
-        float _RimPower;
-        float _RimIntensity;
-
-        struct Input
+        Pass
         {
-            float3 worldPos; // Posizione nel mondo
-            float3 viewDir; // Direzione della vista
-            float4 screenPos; // Posizione sullo schermo per il GrabPass
-            float3 worldNormal; // Normale del mondo
-        };
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
 
-        void surf (Input IN, inout SurfaceOutputStandard o)
-        {
-            // Calcola le coordinate UV della texture catturata
-            float2 grabUV = IN.screenPos.xy / IN.screenPos.w;
+            sampler2D _GrabTexture;
+            fixed4 _RefractionColor;
+            float _RefractionIndex;
+            fixed4 _FresnelColor;
+            float _FresnelPower;
+            float _FresnelIntensity;
 
-            // Calcola il vettore di rifrazione
-            float3 viewDir = normalize(IN.viewDir);
-            float3 normal = normalize(IN.worldNormal);
-            float3 refracted = refract(viewDir, normal, 1.0);
+            struct MeshData
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                float4 texcoord : TEXCOORD0;
+            };
 
-            // Applica la distorsione basata sull'indice di rifrazione alle UV sia orizzontali che verticali
-            grabUV += refracted.xy * _RefractionIndex;
+            struct Interpolators
+            {
+                float4 pos : SV_POSITION;
+                float3 worldPos : TEXCOORD0;
+                float3 viewDir : TEXCOORD1;
+                float4 screenPos : TEXCOORD2;
+                float3 worldNormal : TEXCOORD3;
+            };
 
-            // Campiona la texture catturata con le coordinate distorte
-            fixed4 grabbedColor = tex2D(_GrabTexture, grabUV);
+            Interpolators vert (MeshData v)
+            {
+                Interpolators o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                o.viewDir = UnityWorldSpaceViewDir(o.worldPos);
+                o.screenPos = ComputeScreenPos(o.pos);
+                o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                return o;
+            }
 
-            // Applica il colore del vetro
-            grabbedColor.rgb = lerp(grabbedColor.rgb, _InnerColor.rgb, _InnerColor.a);
+            fixed4 frag (Interpolators i) : SV_Target
+            {
+                // Calculating UV coordinates of the captured texture
+                float2 grabUV = i.screenPos.xy / i.screenPos.w;
 
-            // Calcola il fattore di rim light usando il termine di Fresnel
-            float rimFactor = pow(1.0 - saturate(dot(viewDir, normal)), 1.0 / _RimPower);
-            fixed4 rimColor = _RimColor * _RimIntensity * rimFactor;
+                // Calculating the refraction vector
+                float3 viewDir = normalize(i.viewDir);
+                float3 normal = normalize(i.worldNormal);
+                float3 refracted = refract(viewDir, normal, 1.0);
 
-            // Combina il colore della rim light con il colore rifratto
-            grabbedColor.rgb += rimColor.rgb;
+                // Applying distortion based on the refraction index to both horizontal and vertical UVs
+                grabUV += refracted.xy * _RefractionIndex;
 
-            // Assegna i valori di output
-            o.Albedo = grabbedColor.rgb;  // Usa il colore finale con la rim light
-            o.Alpha = grabbedColor.a;  // Usa l'alpha dalla texture catturata per la trasparenza
+                // Sampling the captured texture with distorted coordinates
+                fixed4 grabbedColor = tex2D(_GrabTexture, grabUV);
+
+                // Applying the refraction color to the grabbed color
+                grabbedColor.rgb = lerp(grabbedColor.rgb, _RefractionColor.rgb, _RefractionColor.a);
+
+                // Calculating the fresnel factor using the Fresnel term
+                float fresnelFactor = pow(1.0 - saturate(dot(viewDir, normal)), 1.0 / _FresnelPower);
+                fixed4 fresnelColor = _FresnelColor * _FresnelIntensity * fresnelFactor;
+
+                // Combining the fresnel color with the refracted color
+                grabbedColor.rgb += fresnelColor.rgb;
+
+                // Returning the final color to the fragment shader
+                return fixed4(grabbedColor.rgb, grabbedColor.a);
+            }
+            ENDCG
         }
-        ENDCG
     }
     FallBack "Transparent/Diffuse"
 }
